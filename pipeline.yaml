@@ -1,0 +1,71 @@
+resources:
+- name: git.diego-ssh
+  type: git
+  source:
+    uri: git@github.com:cloudfoundry/diego-ssh.git
+    private_key: {{github-private-key}}
+    branch: master
+- name: git.eirinifs
+  type: git
+  source:
+    # TODO: Use SUSE repo when I'm able to push there
+    uri: git@github.com:jimmykarily/eirinifs.git
+    private_key: {{github-private-key}}
+jobs:
+  - name: build-eirinifs
+    plan:
+    - get: git.eirinifs
+    - get: git.diego-ssh
+    - task: build-sshd
+      config:
+        platform: linux
+        image_resource:
+          type: registry-image
+          source:
+            repository: golang
+            tag: 1.12
+        inputs:
+          - name: git.diego-ssh
+        outputs:
+          - name: diego-ssh-build
+        run:
+          path: bash
+          args:
+          - -exc
+          - |
+            mkdir -p $GOPATH/src/code.cloudfoundry.org/
+            ln -s $PWD/git.diego-ssh $GOPATH/src/code.cloudfoundry.org/diego-ssh
+            pushd $GOPATH/src/code.cloudfoundry.org/diego-ssh/cmd/sshd
+
+            # Fix the incompatibility of the sftp library by checking out a compatible commit (no dependency management in diego-ssh ?!)
+            go get -d
+            pushd $GOPATH/src/github.com/pkg/sftp
+            git checkout 8e47c75
+            popd
+
+            go build
+            popd
+            mv $GOPATH/src/code.cloudfoundry.org/diego-ssh/cmd/sshd/sshd diego-ssh-build/
+    - task: build-eirinifs
+      privileged: true
+      config:
+        platform: linux
+        image_resource:
+          type: registry-image
+          source:
+            repository: eirini/fsbuilder
+        inputs:
+          - name: diego-ssh-build
+          - name: git.eirinifs
+        outputs:
+          - name: eirinifs-build
+        run:
+          path: bash
+          args:
+          - -exc
+          - |
+            mv diego-ssh-build/sshd git.eirinifs/image/
+            ln -s $PWD/git.eirinifs eirinifs
+            git.eirinifs/ci/build-eirinifs/task.sh
+            # https://github.com/os-fun/eirinifs/blob/wip/ci/build-eirinifs/task.sh#L4
+            cp go/src/github.com/cloudfoundry-incubator/eirinifs/image/eirinifs.tar eirinifs-build/
