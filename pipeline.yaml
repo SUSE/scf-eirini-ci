@@ -4,18 +4,93 @@ resources:
   source:
     uri: git@github.com:cloudfoundry/diego-ssh.git
     private_key: {{github-private-key}}
-    branch: master
 - name: git.eirinifs
   type: git
   source:
-    # TODO: Use SUSE repo when I'm able to push there
-    uri: git@github.com:jimmykarily/eirinifs.git
+    uri: git@github.com:SUSE/eirinifs.git
     private_key: {{github-private-key}}
+- name: git.eirinifs-launchers
+  type: git
+  source:
+    uri: git@github.com:SUSE/eirinifs.git
+    private_key: {{github-private-key}}
+    paths:
+      - launcher.go
+      - go.*
+      - launchcmd/*
+- name: s3.sshd
+  type: s3
+  source:
+    bucket: suse-eirini-bits
+    region_name: eu-central-1
+    regexp: sshd-(.*)
+    access_key_id: ((aws-capbot-access-key))
+    secret_access_key: ((aws-capbot-secret-key))
+- name: s3.launch
+  type: s3
+  source:
+    bucket: suse-eirini-bits
+    region_name: eu-central-1
+    regexp: launch-(.*)
+    access_key_id: ((aws-capbot-access-key))
+    secret_access_key: ((aws-capbot-secret-key))
+- name: s3.launcher
+  type: s3
+  source:
+    bucket: suse-eirini-bits
+    region_name: eu-central-1
+    regexp: launcher-(.*)
+    access_key_id: ((aws-capbot-access-key))
+    secret_access_key: ((aws-capbot-secret-key))
+- name: s3.sle15-eirinifs
+  type: s3
+  source:
+    bucket: suse-eirini-bits
+    region_name: eu-central-1
+    regexp: sle15-eirinifs-(.*).tar
+    access_key_id: ((aws-capbot-access-key))
+    secret_access_key: ((aws-capbot-secret-key))
+- name: semver.sle15-eirinifs
+  type: semver
+  source:
+    driver: s3
+    bucket: suse-eirini-bits
+    key: version-sle15-eirinifs
+    access_key_id: ((aws-capbot-access-key))
+    secret_access_key: ((aws-capbot-secret-key))
+    region_name: eu-central-1
+- name: semver.sshd
+  type: semver
+  source:
+    driver: s3
+    bucket: suse-eirini-bits
+    key: version-sshd
+    access_key_id: ((aws-capbot-access-key))
+    secret_access_key: ((aws-capbot-secret-key))
+    region_name: eu-central-1
+- name: semver.launchers
+  type: semver
+  source:
+    driver: s3
+    bucket: suse-eirini-bits
+    key: version-launchers
+    access_key_id: ((aws-capbot-access-key))
+    secret_access_key: ((aws-capbot-secret-key))
+    region_name: eu-central-1
+- name: github-release.sle15-release
+  type: github-release
+  source:
+    owner: SUSE
+    repository: cf-sle15-release
+    access_token: ((github-access-token))
 jobs:
-  - name: build-eirinifs
+  - name: build-sshd
     plan:
-    - get: git.eirinifs
-    - get: git.diego-ssh
+    - in_parallel:
+      - get: git.diego-ssh
+        trigger: true
+      - get: semver.sshd
+        params: {bump: minor}
     - task: build-sshd
       config:
         platform: linux
@@ -26,6 +101,7 @@ jobs:
             tag: 1.12
         inputs:
           - name: git.diego-ssh
+          - name: semver.sshd
         outputs:
           - name: diego-ssh-build
         run:
@@ -45,27 +121,125 @@ jobs:
 
             go build
             popd
-            mv $GOPATH/src/code.cloudfoundry.org/diego-ssh/cmd/sshd/sshd diego-ssh-build/
-    - task: build-eirinifs
+            mv $GOPATH/src/code.cloudfoundry.org/diego-ssh/cmd/sshd/sshd diego-ssh-build/sshd-$(cat semver.sshd/version)
+    - put: semver.sshd
+      params:
+        file: semver.sshd/version
+    - put: s3.sshd
+      params:
+        file: diego-ssh-build/sshd-*
+        acl: public-read
+  - name: build-launchers
+    plan:
+    - in_parallel:
+      - get: semver.launchers
+        params: {bump: minor}
+      - get: git.eirinifs
+      - get: git.eirinifs-launchers
+        trigger: true
+    - task: build-binaries
+      input_mapping:
+        eirinifs: git.eirinifs
       privileged: true
+      file: git.eirinifs/ci/build-binaries/task.yml
+    - task: rename-binaries
       config:
         platform: linux
         image_resource:
           type: registry-image
           source:
-            repository: eirini/fsbuilder
+            repository: splatform/bosh-cli
+            tag: 761288a4a7202607e73bbcb57f6e89d940bf92be
         inputs:
-          - name: diego-ssh-build
-          - name: git.eirinifs
+          - name: binaries
+          - name: semver.launchers
         outputs:
-          - name: eirinifs-build
+          - name: binaries
         run:
           path: bash
           args:
           - -exc
           - |
-            mv diego-ssh-build/sshd git.eirinifs/image/
-            ln -s $PWD/git.eirinifs eirinifs
-            git.eirinifs/ci/build-eirinifs/task.sh
-            # https://github.com/os-fun/eirinifs/blob/wip/ci/build-eirinifs/task.sh#L4
-            cp go/src/github.com/cloudfoundry-incubator/eirinifs/image/eirinifs.tar eirinifs-build/
+            mv binaries/launch binaries/launch-$(cat semver.launchers/version)
+            mv binaries/launcher binaries/launcher-$(cat semver.launchers/version)
+    - put: semver.launchers
+      params:
+        file: semver.launchers/version
+    - put: s3.launch
+      params:
+        file: binaries/launch-*
+        acl: public-read
+    - put: s3.launcher
+      params:
+        file: binaries/launcher-*
+        acl: public-read
+  - name: build-sle15-eirinifs
+    plan:
+    - in_parallel:
+      - get: s3.launch
+        trigger: true
+        passed: [ build-launchers ]
+      - get: s3.launcher
+        trigger: true
+        passed: [ build-launchers ]
+      - get: s3.sshd
+        trigger: true
+        passed: [ build-sshd ]
+      - get: git.eirinifs
+      - get: github-release.sle15-release
+      - get: semver.sle15-eirinifs
+        params: {bump: minor}
+    - task: copy_binaries
+      config:
+        platform: linux
+        image_resource:
+          type: registry-image
+          source:
+            repository: splatform/bosh-cli
+            tag: 761288a4a7202607e73bbcb57f6e89d940bf92be
+        inputs:
+          - name: s3.launcher
+          - name: s3.launch
+          - name: s3.sshd
+        outputs:
+          - name: binaries
+        run:
+          path: bash
+          args:
+          - -exc
+          - |
+            cp s3.launcher/launcher-* binaries/launcher
+            cp s3.launch/launch-* binaries/launch
+            cp s3.sshd/sshd-* binaries/sshd
+    - task: build-sle15-eirinifs
+      privileged: true
+      input_mapping:
+        eirinifs: git.eirinifs
+        sle15-release: github-release.sle15-release
+      file: git.eirinifs/ci/build-sle15/task.yml
+    - task: copy-sle15-eirinifs-file
+      config:
+        platform: linux
+        image_resource:
+          type: registry-image
+          source:
+            repository: splatform/bosh-cli
+            tag: 761288a4a7202607e73bbcb57f6e89d940bf92be
+        inputs:
+          - name: go/src/github.com/cloudfoundry-incubator/eirinifs/image/
+          - name: semver.sle15-eirinifs
+        outputs:
+          - name: sle15-eirinifs-output
+        run:
+          path: bash
+          args:
+          - -exc
+          - |
+            cp go/src/github.com/cloudfoundry-incubator/eirinifs/image/sle15.tar sle15-eirinifs-output/sle15-eirinifs-$(cat semver.sle15-eirinifs/version).tar
+    - put: semver.sle15-eirinifs
+      params:
+        file: semver.sle15-eirinifs/version
+    - put: s3.sle15-eirinifs
+      params:
+        file: sle15-eirinifs-output/sle15-eirinifs-*.tar
+        acl: public-read
