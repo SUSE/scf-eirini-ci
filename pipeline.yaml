@@ -47,7 +47,7 @@ resources:
   source:
     bucket: suse-eirini-bits
     region_name: eu-central-1
-    regexp: sle15-eirinifs-(.*).tar
+    regexp: sle15-eirinifs-v(.*).tar
     access_key_id: ((aws-capbot-access-key))
     secret_access_key: ((aws-capbot-secret-key))
 - name: semver.sle15-eirinifs
@@ -235,11 +235,11 @@ jobs:
           args:
           - -exc
           - |
-            cp go/src/github.com/cloudfoundry-incubator/eirinifs/image/sle15.tar sle15-eirinifs-output/sle15-eirinifs-$(cat semver.sle15-eirinifs/version).tar
+            cp go/src/github.com/cloudfoundry-incubator/eirinifs/image/sle15.tar sle15-eirinifs-output/sle15-eirinifs-v$(cat semver.sle15-eirinifs/version).tar
     - put: semver.sle15-eirinifs
       params:
         file: semver.sle15-eirinifs/version
     - put: s3.sle15-eirinifs
       params:
-        file: sle15-eirinifs-output/sle15-eirinifs-*.tar
+        file: sle15-eirinifs-output/sle15-eirinifs-v*.tar
         acl: public-read
