@@ -18,6 +18,31 @@ resources:
       - launcher.go
       - go.*
       - launchcmd/*
+- name: git.eirini-staging
+  type: git
+  source:
+    # TODO: Use the upstream repo when this is merged: https://github.com/cloudfoundry-incubator/eirini-staging/pull/5/files
+    uri: git@github.com:jimmykarily/eirini-staging.git
+    private_key: {{github-private-key}}
+    branch: parameterize_base_image
+- name: docker-image.downloader-image
+  type: docker-image
+  source:
+    repository: ((docker-internal-registry))/recipe-downloader
+    username: ((docker-internal-username))
+    password: ((docker-internal-password))
+- name: docker-image.uploader-image
+  type: docker-image
+  source:
+    repository: ((docker-internal-registry))/recipe-uploader
+    username: ((docker-internal-username))
+    password: ((docker-internal-password))
+- name: docker-image.executor-image
+  type: docker-image
+  source:
+    repository: ((docker-internal-registry))/recipe-executor
+    username: ((docker-internal-username))
+    password: ((docker-internal-password))
 - name: s3.sshd
   type: s3
   source:
@@ -187,6 +212,7 @@ jobs:
         passed: [ build-sshd ]
       - get: git.eirinifs
       - get: github-release.sle15-release
+        trigger: true
       - get: semver.sle15-eirinifs
         params: {bump: minor}
     - task: copy_binaries
@@ -243,3 +269,42 @@ jobs:
       params:
         file: sle15-eirinifs-output/sle15-eirinifs-v*.tar
         acl: public-read
+  - name: build-downloader-image
+    plan:
+    - get: git.eirini-staging
+      trigger: true
+    - get: github-release.sle15-release
+      trigger: true
+    - put: docker-image.downloader-image
+      params:
+        build_args:
+          # TODO: Should we use the version of the rootfs that's included in the github-release resource above?
+          baseimage: registry.opensuse.org/cloud/platform/stack/rootfs/images/sle15:latest
+        build: git.eirini-staging
+        dockerfile: git.eirini-staging/image/downloader/Dockerfile
+  - name: build-executor-image
+    plan:
+    - get: git.eirini-staging
+      trigger: true
+    - get: github-release.sle15-release
+      trigger: true
+    - put: docker-image.executor-image
+      params:
+        build_args:
+          # TODO: Should we use the version of the rootfs that's included in the github-release resource above?
+          baseimage: registry.opensuse.org/cloud/platform/stack/rootfs/images/sle15:latest
+        build: git.eirini-staging
+        dockerfile: git.eirini-staging/image/executor/Dockerfile
+  - name: build-uploader-image
+    plan:
+    - get: git.eirini-staging
+      trigger: true
+    - get: github-release.sle15-release
+      trigger: true
+    - put: docker-image.uploader-image
+      params:
+        build_args:
+          # TODO: Should we use the version of the rootfs that's included in the github-release resource above?
+          baseimage: registry.opensuse.org/cloud/platform/stack/rootfs/images/sle15:latest
+        build: git.eirini-staging
+        dockerfile: git.eirini-staging/image/uploader/Dockerfile
