@@ -237,6 +237,7 @@ jobs:
             cp s3.launcher/launcher-* binaries/launcher
             cp s3.launch/launch-* binaries/launch
             cp s3.sshd/sshd-* binaries/sshd
+            chmod +x binaries/*
     - task: build-sle15-eirinifs
       privileged: true
       input_mapping:
