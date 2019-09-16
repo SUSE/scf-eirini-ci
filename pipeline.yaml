@@ -67,20 +67,20 @@ resources:
     regexp: launcher-(.*)
     access_key_id: ((aws-capbot-access-key))
     secret_access_key: ((aws-capbot-secret-key))
-- name: s3.sle15-eirinifs
+- name: s3.eirinifs-sle15
   type: s3
   source:
     bucket: suse-eirini-bits
     region_name: eu-central-1
-    regexp: sle15-eirinifs-v(.*).tar
+    regexp: eirinifs-sle15-v(.*).tar
     access_key_id: ((aws-capbot-access-key))
     secret_access_key: ((aws-capbot-secret-key))
-- name: semver.sle15-eirinifs
+- name: semver.eirinifs-sle15
   type: semver
   source:
     driver: s3
     bucket: suse-eirini-bits
-    key: version-sle15-eirinifs
+    key: version-eirinifs-sle15
     access_key_id: ((aws-capbot-access-key))
     secret_access_key: ((aws-capbot-secret-key))
     region_name: eu-central-1
@@ -198,7 +198,7 @@ jobs:
       params:
         file: binaries/launcher-*
         acl: public-read
-  - name: build-sle15-eirinifs
+  - name: build-eirinifs-sle15
     plan:
     - in_parallel:
       - get: s3.launch
@@ -213,7 +213,7 @@ jobs:
       - get: git.eirinifs
       - get: github-release.sle15-release
         trigger: true
-      - get: semver.sle15-eirinifs
+      - get: semver.eirinifs-sle15
         params: {bump: minor}
     - task: copy_binaries
       config:
@@ -238,13 +238,13 @@ jobs:
             cp s3.launch/launch-* binaries/launch
             cp s3.sshd/sshd-* binaries/sshd
             chmod +x binaries/*
-    - task: build-sle15-eirinifs
+    - task: build-eirinifs-sle15
       privileged: true
       input_mapping:
         eirinifs: git.eirinifs
         sle15-release: github-release.sle15-release
       file: git.eirinifs/ci/build-sle15/task.yml
-    - task: copy-sle15-eirinifs-file
+    - task: copy-eirinifs-sle15-file
       config:
         platform: linux
         image_resource:
@@ -254,21 +254,21 @@ jobs:
             tag: 761288a4a7202607e73bbcb57f6e89d940bf92be
         inputs:
           - name: go/src/github.com/cloudfoundry-incubator/eirinifs/image/
-          - name: semver.sle15-eirinifs
+          - name: semver.eirinifs-sle15
         outputs:
-          - name: sle15-eirinifs-output
+          - name: eirinifs-sle15-output
         run:
           path: bash
           args:
           - -exc
           - |
-            cp go/src/github.com/cloudfoundry-incubator/eirinifs/image/sle15.tar sle15-eirinifs-output/sle15-eirinifs-v$(cat semver.sle15-eirinifs/version).tar
-    - put: semver.sle15-eirinifs
+            cp go/src/github.com/cloudfoundry-incubator/eirinifs/image/sle15.tar eirinifs-sle15-output/eirinifs-sle15-v$(cat semver.eirinifs-sle15/version).tar
+    - put: semver.eirinifs-sle15
       params:
-        file: semver.sle15-eirinifs/version
-    - put: s3.sle15-eirinifs
+        file: semver.eirinifs-sle15/version
+    - put: s3.eirinifs-sle15
       params:
-        file: sle15-eirinifs-output/sle15-eirinifs-v*.tar
+        file: eirinifs-sle15-output/eirinifs-sle15-v*.tar
         acl: public-read
   - name: build-downloader-image
     plan:
