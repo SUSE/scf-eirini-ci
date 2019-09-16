@@ -1,6 +1,6 @@
-# SUSE Eirini bits
+# SCF Eirini CI
 
-This repository is the collection of all the needed task definitions and pipelines needed, in order to build the Eirini bits for a SUSE flavor or Eirini (https://github.com/cloudfoundry-incubator/eirini)
+This repository is the collection of all the needed task definitions and pipelines needed, in order to build the Eirini bits for a [SUSE flavor](https://github.com/suse/scf) of [Eirini](https://github.com/cloudfoundry-incubator/eirini)
 
 ## Bits
 
