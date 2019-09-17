@@ -294,7 +294,7 @@ jobs:
           - -exc
           - |
             pushd git.eirini-staging
-            git rev-parse HEAD > ../image_tag/tag
+            echo "$(date +"%s")-$(git rev-parse HEAD)" > ../image_tag/tag
             popd
     - put: docker-image.downloader-image
       params:
@@ -329,7 +329,7 @@ jobs:
           - -exc
           - |
             pushd git.eirini-staging
-            git rev-parse HEAD > ../image_tag/tag
+            echo "$(date +"%s")-$(git rev-parse HEAD)" > ../image_tag/tag
             popd
     - put: docker-image.executor-image
       params:
@@ -364,7 +364,7 @@ jobs:
           - -exc
           - |
             pushd git.eirini-staging
-            git rev-parse HEAD > ../image_tag/tag
+            echo "$(date +"%s")-$(git rev-parse HEAD)" > ../image_tag/tag
             popd
     - put: docker-image.uploader-image
       params:
