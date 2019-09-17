@@ -276,6 +276,26 @@ jobs:
       trigger: true
     - get: github-release.sle15-release
       trigger: true
+    - task: get-image-tag-from-git
+      config:
+        platform: linux
+        image_resource:
+          type: registry-image
+          source:
+            repository: splatform/bosh-cli
+            tag: 761288a4a7202607e73bbcb57f6e89d940bf92be
+        inputs:
+          - name: git.eirini-staging
+        outputs:
+          - name: image_tag
+        run:
+          path: bash
+          args:
+          - -exc
+          - |
+            pushd git.eirini-staging
+            git rev-parse HEAD > ../image_tag/tag
+            popd
     - put: docker-image.downloader-image
       params:
         build_args:
@@ -283,12 +303,34 @@ jobs:
           baseimage: registry.opensuse.org/cloud/platform/stack/rootfs/images/sle15:latest
         build: git.eirini-staging
         dockerfile: git.eirini-staging/image/downloader/Dockerfile
+        tag_file: image_tag/tag
+        tag_as_latest: true
   - name: build-executor-image
     plan:
     - get: git.eirini-staging
       trigger: true
     - get: github-release.sle15-release
       trigger: true
+    - task: get-image-tag-from-git
+      config:
+        platform: linux
+        image_resource:
+          type: registry-image
+          source:
+            repository: splatform/bosh-cli
+            tag: 761288a4a7202607e73bbcb57f6e89d940bf92be
+        inputs:
+          - name: git.eirini-staging
+        outputs:
+          - name: image_tag
+        run:
+          path: bash
+          args:
+          - -exc
+          - |
+            pushd git.eirini-staging
+            git rev-parse HEAD > ../image_tag/tag
+            popd
     - put: docker-image.executor-image
       params:
         build_args:
@@ -296,12 +338,34 @@ jobs:
           baseimage: registry.opensuse.org/cloud/platform/stack/rootfs/images/sle15:latest
         build: git.eirini-staging
         dockerfile: git.eirini-staging/image/executor/Dockerfile
+        tag_file: image_tag/tag
+        tag_as_latest: true
   - name: build-uploader-image
     plan:
     - get: git.eirini-staging
       trigger: true
     - get: github-release.sle15-release
       trigger: true
+    - task: get-image-tag-from-git
+      config:
+        platform: linux
+        image_resource:
+          type: registry-image
+          source:
+            repository: splatform/bosh-cli
+            tag: 761288a4a7202607e73bbcb57f6e89d940bf92be
+        inputs:
+          - name: git.eirini-staging
+        outputs:
+          - name: image_tag
+        run:
+          path: bash
+          args:
+          - -exc
+          - |
+            pushd git.eirini-staging
+            git rev-parse HEAD > ../image_tag/tag
+            popd
     - put: docker-image.uploader-image
       params:
         build_args:
@@ -309,3 +373,5 @@ jobs:
           baseimage: registry.opensuse.org/cloud/platform/stack/rootfs/images/sle15:latest
         build: git.eirini-staging
         dockerfile: git.eirini-staging/image/uploader/Dockerfile
+        tag_file: image_tag/tag
+        tag_as_latest: true
