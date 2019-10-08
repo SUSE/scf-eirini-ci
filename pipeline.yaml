@@ -28,21 +28,21 @@ resources:
 - name: docker-image.downloader-image
   type: docker-image
   source:
-    repository: ((docker-internal-registry))/recipe-downloader
-    username: ((docker-internal-username))
-    password: ((docker-internal-password))
+    repository: ((docker-public-staging-registry))/((docker-public-staging-org))/recipe-downloader
+    username: ((docker-public-staging-username))
+    password: ((docker-public-staging-password))
 - name: docker-image.uploader-image
   type: docker-image
   source:
-    repository: ((docker-internal-registry))/recipe-uploader
-    username: ((docker-internal-username))
-    password: ((docker-internal-password))
+    repository: ((docker-public-staging-registry))/((docker-public-staging-org))/recipe-uploader
+    username: ((docker-public-staging-username))
+    password: ((docker-public-staging-password))
 - name: docker-image.executor-image
   type: docker-image
   source:
-    repository: ((docker-internal-registry))/recipe-executor
-    username: ((docker-internal-username))
-    password: ((docker-internal-password))
+    repository: ((docker-public-staging-registry))/((docker-public-staging-org))/recipe-executor
+    username: ((docker-public-staging-username))
+    password: ((docker-public-staging-password))
 - name: s3.sshd
   type: s3
   source:
