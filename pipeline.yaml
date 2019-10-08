@@ -1,4 +1,15 @@
 resources:
+- name: ci
+  type: git
+  source:
+    uri: git@github.com:SUSE/scf-eirini-ci.git
+    private_key: {{github-private-key}}
+- name: git.scf
+  type: git
+  source:
+    uri: git@github.com:SUSE/scf.git
+    private_key: {{github-private-key}}
+    branch: develop
 - name: git.diego-ssh
   type: git
   source:
@@ -305,12 +316,48 @@ jobs:
         dockerfile: git.eirini-staging/image/downloader/Dockerfile
         tag_file: image_tag/tag
         tag_as_latest: true
+  - name: create-downloader-pr
+    plan:
+    - in_parallel:
+      - get: docker-image.downloader-image
+        trigger: true
+        passed: [ build-downloader-image ]
+      - get: git.scf
+        params:
+          submodules: none
+      - get: ci
+    - task: create-scf-pr
+      input_mapping: { docker_image: docker-image.downloader-image }
+      config:
+        platform: linux
+        image_resource:
+          type: registry-image
+          source:
+            repository: splatform/concourse-brats
+        inputs:
+          - name: docker_image
+          - name: ci
+          - name: git.scf
+        params:
+          GITHUB_TOKEN: ((github-access-token))
+          GITHUB_PRIVATE_KEY: |
+            {{github-private-key}}
+          GIT_MAIL: {{github-username}}
+          GIT_USER: suse-cf-ci-bot
+          IMAGE_TO_REPLACE: recipe-downloader
+        run:
+          path: ci/tasks/create-pr.sh
   - name: build-executor-image
     plan:
-    - get: git.eirini-staging
-      trigger: true
-    - get: github-release.sle15-release
-      trigger: true
+    - in_parallel:
+      - get: git.eirini-staging
+        trigger: true
+      - get: github-release.sle15-release
+        trigger: true
+      - get: git.scf
+        params:
+          submodules: none
+      - get: ci
     - task: get-image-tag-from-git
       config:
         platform: linux
@@ -340,6 +387,37 @@ jobs:
         dockerfile: git.eirini-staging/image/executor/Dockerfile
         tag_file: image_tag/tag
         tag_as_latest: true
+  - name: create-executor-pr
+    plan:
+    - in_parallel:
+      - get: docker-image.executor-image
+        trigger: true
+        passed: [ build-executor-image ]
+      - get: git.scf
+        params:
+          submodules: none
+      - get: ci
+    - task: create-scf-pr
+      input_mapping: { docker_image: docker-image.executor-image }
+      config:
+        platform: linux
+        image_resource:
+          type: registry-image
+          source:
+            repository: splatform/concourse-brats
+        inputs:
+          - name: docker_image
+          - name: ci
+          - name: git.scf
+        params:
+          GITHUB_TOKEN: ((github-access-token))
+          GITHUB_PRIVATE_KEY: |
+            {{github-private-key}}
+          GIT_MAIL: {{github-username}}
+          GIT_USER: suse-cf-ci-bot
+          IMAGE_TO_REPLACE: recipe-executor
+        run:
+          path: ci/tasks/create-pr.sh
   - name: build-uploader-image
     plan:
     - get: git.eirini-staging
@@ -375,3 +453,34 @@ jobs:
         dockerfile: git.eirini-staging/image/uploader/Dockerfile
         tag_file: image_tag/tag
         tag_as_latest: true
+  - name: create-uploader-pr
+    plan:
+    - in_parallel:
+      - get: docker-image.uploader-image
+        trigger: true
+        passed: [ build-uploader-image ]
+      - get: git.scf
+        params:
+          submodules: none
+      - get: ci
+    - task: create-scf-pr
+      input_mapping: { docker_image: docker-image.uploader-image }
+      config:
+        platform: linux
+        image_resource:
+          type: registry-image
+          source:
+            repository: splatform/concourse-brats
+        inputs:
+          - name: docker_image
+          - name: ci
+          - name: git.scf
+        params:
+          GITHUB_TOKEN: ((github-access-token))
+          GITHUB_PRIVATE_KEY: |
+            {{github-private-key}}
+          GIT_MAIL: {{github-username}}
+          GIT_USER: suse-cf-ci-bot
+          IMAGE_TO_REPLACE: recipe-uploader
+        run:
+          path: ci/tasks/create-pr.sh
