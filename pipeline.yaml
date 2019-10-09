@@ -86,6 +86,33 @@ resources:
     regexp: eirinifs-sle15-v(.*).tar
     access_key_id: ((aws-capbot-access-key))
     secret_access_key: ((aws-capbot-secret-key))
+- name: semver.downloader-image
+  type: semver
+  source:
+    driver: s3
+    bucket: suse-eirini-bits
+    key: version-eirini-downloader-image
+    access_key_id: ((aws-capbot-access-key))
+    secret_access_key: ((aws-capbot-secret-key))
+    region_name: eu-central-1
+- name: semver.executor-image
+  type: semver
+  source:
+    driver: s3
+    bucket: suse-eirini-bits
+    key: version-eirini-executor-image
+    access_key_id: ((aws-capbot-access-key))
+    secret_access_key: ((aws-capbot-secret-key))
+    region_name: eu-central-1
+- name: semver.uploader-image
+  type: semver
+  source:
+    driver: s3
+    bucket: suse-eirini-bits
+    key: version-eirini-uploader-image
+    access_key_id: ((aws-capbot-access-key))
+    secret_access_key: ((aws-capbot-secret-key))
+    region_name: eu-central-1
 - name: semver.eirinifs-sle15
   type: semver
   source:
@@ -287,7 +314,9 @@ jobs:
       trigger: true
     - get: github-release.sle15-release
       trigger: true
-    - task: get-image-tag-from-git
+    - get: semver.downloader-image
+      params: {bump: minor}
+    - task: get-image-labels-from-git
       config:
         platform: linux
         image_resource:
@@ -298,14 +327,14 @@ jobs:
         inputs:
           - name: git.eirini-staging
         outputs:
-          - name: image_tag
+          - name: image_labels
         run:
           path: bash
           args:
           - -exc
           - |
             pushd git.eirini-staging
-            echo "$(date +"%s")-$(git rev-parse HEAD)" > ../image_tag/tag
+            echo "{ \"commit\": \"$(git rev-parse HEAD)\", \"timestamp\": \"$(date +"%s")\" }" > ../image_labels/labels
             popd
     - put: docker-image.downloader-image
       params:
@@ -314,20 +343,25 @@ jobs:
           baseimage: registry.opensuse.org/cloud/platform/stack/rootfs/images/sle15:latest
         build: git.eirini-staging
         dockerfile: git.eirini-staging/image/downloader/Dockerfile
-        tag_file: image_tag/tag
-        tag_as_latest: false # NOTE: don't change this to true. The pr task won't have a ccess to our tag anymore
+        tag_file: semver.downloader-image/version
+        labels_file: image_labels/labels
+        tag_as_latest: true
+    - put: semver.downloader-image
+      params:
+        file: semver.downloader-image/version
   - name: create-downloader-pr
     plan:
     - in_parallel:
-      - get: docker-image.downloader-image
+      - get: semver.downloader-image
         trigger: true
         passed: [ build-downloader-image ]
+      - get: docker-image.downloader-image
       - get: git.scf
         params:
           submodules: none
       - get: ci
     - task: create-scf-pr
-      input_mapping: { docker_image: docker-image.downloader-image }
+      input_mapping: { semver: semver.downloader-image, docker_image: docker-image.downloader-image }
       config:
         platform: linux
         image_resource:
@@ -335,6 +369,7 @@ jobs:
           source:
             repository: splatform/concourse-brats
         inputs:
+          - name: semver
           - name: docker_image
           - name: ci
           - name: git.scf
@@ -354,11 +389,13 @@ jobs:
         trigger: true
       - get: github-release.sle15-release
         trigger: true
+      - get: semver.executor-image
+        params: {bump: minor}
       - get: git.scf
         params:
           submodules: none
       - get: ci
-    - task: get-image-tag-from-git
+    - task: get-image-labels-from-git
       config:
         platform: linux
         image_resource:
@@ -369,14 +406,14 @@ jobs:
         inputs:
           - name: git.eirini-staging
         outputs:
-          - name: image_tag
+          - name: image_labels
         run:
           path: bash
           args:
           - -exc
           - |
             pushd git.eirini-staging
-            echo "$(date +"%s")-$(git rev-parse HEAD)" > ../image_tag/tag
+            echo "{ \"commit\": \"$(git rev-parse HEAD)\", \"timestamp\": \"$(date +"%s")\" }" > ../image_labels/labels
             popd
     - put: docker-image.executor-image
       params:
@@ -385,20 +422,25 @@ jobs:
           baseimage: registry.opensuse.org/cloud/platform/stack/rootfs/images/sle15:latest
         build: git.eirini-staging
         dockerfile: git.eirini-staging/image/executor/Dockerfile
-        tag_file: image_tag/tag
-        tag_as_latest: false # NOTE: don't change this to true. The pr task won't have a ccess to our tag anymore
+        labels_file: image_labels/labels
+        tag_as_latest: true
+        tag_file: semver.executor-image/version
+    - put: semver.executor-image
+      params:
+        file: semver.executor-image/version
   - name: create-executor-pr
     plan:
     - in_parallel:
-      - get: docker-image.executor-image
+      - get: semver.executor-image
         trigger: true
         passed: [ build-executor-image ]
+      - get: docker-image.executor-image
       - get: git.scf
         params:
           submodules: none
       - get: ci
     - task: create-scf-pr
-      input_mapping: { docker_image: docker-image.executor-image }
+      input_mapping: { semver: semver.executor-image, docker_image: docker-image.executor-image }
       config:
         platform: linux
         image_resource:
@@ -406,6 +448,7 @@ jobs:
           source:
             repository: splatform/concourse-brats
         inputs:
+          - name: semver
           - name: docker_image
           - name: ci
           - name: git.scf
@@ -424,7 +467,9 @@ jobs:
       trigger: true
     - get: github-release.sle15-release
       trigger: true
-    - task: get-image-tag-from-git
+    - get: semver.uploader-image
+      params: {bump: minor}
+    - task: get-image-labels-from-git
       config:
         platform: linux
         image_resource:
@@ -435,14 +480,14 @@ jobs:
         inputs:
           - name: git.eirini-staging
         outputs:
-          - name: image_tag
+          - name: image_labels
         run:
           path: bash
           args:
           - -exc
           - |
             pushd git.eirini-staging
-            echo "$(date +"%s")-$(git rev-parse HEAD)" > ../image_tag/tag
+            echo "{ \"commit\": \"$(git rev-parse HEAD)\", \"timestamp\": \"$(date +"%s")\" }" > ../image_labels/labels
             popd
     - put: docker-image.uploader-image
       params:
@@ -451,20 +496,25 @@ jobs:
           baseimage: registry.opensuse.org/cloud/platform/stack/rootfs/images/sle15:latest
         build: git.eirini-staging
         dockerfile: git.eirini-staging/image/uploader/Dockerfile
-        tag_file: image_tag/tag
-        tag_as_latest: false # NOTE: don't change this to true. The pr task won't have a ccess to our tag anymore
+        labels_file: image_labels/labels
+        tag_file: semver.uploader-image/version
+        tag_as_latest: true
+    - put: semver.uploader-image
+      params:
+        file: semver.uploader-image/version
   - name: create-uploader-pr
     plan:
     - in_parallel:
-      - get: docker-image.uploader-image
+      - get: semver.uploader-image
         trigger: true
         passed: [ build-uploader-image ]
+      - get: docker-image.uploader-image
       - get: git.scf
         params:
           submodules: none
       - get: ci
     - task: create-scf-pr
-      input_mapping: { docker_image: docker-image.uploader-image }
+      input_mapping: { semver: semver.uploader-image, docker-image: docker-image.uploader-image }
       config:
         platform: linux
         image_resource:
@@ -472,7 +522,8 @@ jobs:
           source:
             repository: splatform/concourse-brats
         inputs:
-          - name: docker_image
+          - name: semver
+          - name: docker-image
           - name: ci
           - name: git.scf
         params:
