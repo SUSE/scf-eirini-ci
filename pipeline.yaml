@@ -315,7 +315,7 @@ jobs:
         build: git.eirini-staging
         dockerfile: git.eirini-staging/image/downloader/Dockerfile
         tag_file: image_tag/tag
-        tag_as_latest: true
+        tag_as_latest: false # NOTE: don't change this to true. The pr task won't have a ccess to our tag anymore
   - name: create-downloader-pr
     plan:
     - in_parallel:
@@ -386,7 +386,7 @@ jobs:
         build: git.eirini-staging
         dockerfile: git.eirini-staging/image/executor/Dockerfile
         tag_file: image_tag/tag
-        tag_as_latest: true
+        tag_as_latest: false # NOTE: don't change this to true. The pr task won't have a ccess to our tag anymore
   - name: create-executor-pr
     plan:
     - in_parallel:
@@ -452,7 +452,7 @@ jobs:
         build: git.eirini-staging
         dockerfile: git.eirini-staging/image/uploader/Dockerfile
         tag_file: image_tag/tag
-        tag_as_latest: true
+        tag_as_latest: false # NOTE: don't change this to true. The pr task won't have a ccess to our tag anymore
   - name: create-uploader-pr
     plan:
     - in_parallel:

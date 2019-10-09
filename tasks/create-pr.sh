@@ -35,7 +35,7 @@ git config --global user.email "$GIT_MAIL"
 git config --global user.name "$GIT_USER"
 
 # TODO: Get the image url from the resource directory
-new_image="$(cat docker_image/repository)@$(cat docker_image/image-id)"
+new_image="$(cat docker_image/repository):$(cat docker_image/tag)"
 COMMIT_TITLE="Bump Eirini ${IMAGE_TO_REPLACE} image"
 
 # Update release in scf repo
