@@ -90,6 +90,7 @@ resources:
   type: semver
   source:
     driver: s3
+    initial_version: 0.3.0
     bucket: suse-eirini-bits
     key: version-eirini-downloader-image
     access_key_id: ((aws-capbot-access-key))
@@ -99,6 +100,7 @@ resources:
   type: semver
   source:
     driver: s3
+    initial_version: 0.3.0
     bucket: suse-eirini-bits
     key: version-eirini-executor-image
     access_key_id: ((aws-capbot-access-key))
@@ -108,6 +110,7 @@ resources:
   type: semver
   source:
     driver: s3
+    initial_version: 0.3.0
     bucket: suse-eirini-bits
     key: version-eirini-uploader-image
     access_key_id: ((aws-capbot-access-key))
