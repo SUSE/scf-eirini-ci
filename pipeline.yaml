@@ -517,7 +517,7 @@ jobs:
           submodules: none
       - get: ci
     - task: create-scf-pr
-      input_mapping: { semver: semver.uploader-image, docker-image: docker-image.uploader-image }
+      input_mapping: { semver: semver.uploader-image, docker_image: docker-image.uploader-image }
       config:
         platform: linux
         image_resource:
@@ -526,7 +526,7 @@ jobs:
             repository: splatform/concourse-brats
         inputs:
           - name: semver
-          - name: docker-image
+          - name: docker_image
           - name: ci
           - name: git.scf
         params:
