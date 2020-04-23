@@ -164,7 +164,7 @@ jobs:
           type: registry-image
           source:
             repository: golang
-            tag: 1.12
+            tag: 1.14
         inputs:
           - name: git.diego-ssh
           - name: semver.sshd
