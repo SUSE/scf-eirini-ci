@@ -1,30 +1,34 @@
+# Variables
+{{ $stagingImages := slice "downloader" "executor" "uploader" }}
+{{ $otherImages := slice "opi" }}
+
 resources:
 - name: ci
   type: git
   source:
     uri: git@github.com:SUSE/scf-eirini-ci.git
-    private_key: {{github-private-key}}
+    private_key: {{ "{{github-private-key}}" }}
 - name: git.scf
   type: git
   source:
     uri: git@github.com:SUSE/scf.git
-    private_key: {{github-private-key}}
+    private_key: {{ "{{github-private-key}}" }}
     branch: develop
 - name: git.diego-ssh
   type: git
   source:
     uri: git@github.com:cloudfoundry/diego-ssh.git
-    private_key: {{github-private-key}}
+    private_key: {{ "{{github-private-key}}" }}
 - name: git.eirinifs
   type: git
   source:
     uri: git@github.com:SUSE/eirinifs.git
-    private_key: {{github-private-key}}
+    private_key: {{ "{{github-private-key}}" }}
 - name: git.eirinifs-launchers
   type: git
   source:
     uri: git@github.com:SUSE/eirinifs.git
-    private_key: {{github-private-key}}
+    private_key: {{ "{{github-private-key}}" }}
     paths:
       - launcher.go
       - go.*
@@ -33,25 +37,17 @@ resources:
   type: git
   source:
     uri: git@github.com:cloudfoundry-incubator/eirini-staging.git
-    private_key: {{github-private-key}}
-- name: docker-image.downloader-image
+    private_key: {{ "{{github-private-key}}" }}
+
+{{- range $_, $stagingImage := $stagingImages }}
+- name: docker-image.{{ $stagingImage }}-image
   type: docker-image
   source:
-    repository: ((docker-public-staging-registry))/((docker-public-staging-org))/recipe-downloader
+    repository: ((docker-public-staging-registry))/((docker-public-staging-org))/recipe-{{ $stagingImage }}
     username: ((docker-public-staging-username))
     password: ((docker-public-staging-password))
-- name: docker-image.uploader-image
-  type: docker-image
-  source:
-    repository: ((docker-public-staging-registry))/((docker-public-staging-org))/recipe-uploader
-    username: ((docker-public-staging-username))
-    password: ((docker-public-staging-password))
-- name: docker-image.executor-image
-  type: docker-image
-  source:
-    repository: ((docker-public-staging-registry))/((docker-public-staging-org))/recipe-executor
-    username: ((docker-public-staging-username))
-    password: ((docker-public-staging-password))
+{{ end }}
+
 - name: s3.sshd
   type: s3
   source:
@@ -84,36 +80,20 @@ resources:
     regexp: eirinifs-sle15-v(.*).tar
     access_key_id: ((aws-capbot-access-key))
     secret_access_key: ((aws-capbot-secret-key))
-- name: semver.downloader-image
+
+{{- range $_, $stagingImage := $stagingImages }}
+- name: semver.{{ $stagingImage }}-image
   type: semver
   source:
     driver: s3
     initial_version: 0.3.0
     bucket: suse-eirini-bits
-    key: version-eirini-downloader-image
+    key: version-eirini-{{ $stagingImage }}-image
     access_key_id: ((aws-capbot-access-key))
     secret_access_key: ((aws-capbot-secret-key))
     region_name: eu-central-1
-- name: semver.executor-image
-  type: semver
-  source:
-    driver: s3
-    initial_version: 0.3.0
-    bucket: suse-eirini-bits
-    key: version-eirini-executor-image
-    access_key_id: ((aws-capbot-access-key))
-    secret_access_key: ((aws-capbot-secret-key))
-    region_name: eu-central-1
-- name: semver.uploader-image
-  type: semver
-  source:
-    driver: s3
-    initial_version: 0.3.0
-    bucket: suse-eirini-bits
-    key: version-eirini-uploader-image
-    access_key_id: ((aws-capbot-access-key))
-    secret_access_key: ((aws-capbot-secret-key))
-    region_name: eu-central-1
+{{ end }}
+
 - name: semver.eirinifs-sle15
   type: semver
   source:
@@ -146,7 +126,7 @@ resources:
   source:
     owner: SUSE
     repository: cf-sle15-release
-    access_token: ((github-access-token))
+    access_token: {{ "{{github-access-token}}" }}
 jobs:
   - name: build-sshd
     plan:
@@ -306,92 +286,17 @@ jobs:
       params:
         file: eirinifs-sle15-output/eirinifs-sle15-v*.tar
         acl: public-read
-  - name: build-downloader-image
-    plan:
-    - get: git.eirini-staging
-      trigger: true
-    - get: github-release.sle15-release
-      trigger: true
-    - get: semver.downloader-image
-      params: {bump: minor}
-    - task: get-image-labels-from-git
-      config:
-        platform: linux
-        image_resource:
-          type: registry-image
-          source:
-            repository: splatform/bosh-cli
-            tag: ffdc518965675023196dd8cf511e3680484c3ed0
-        inputs:
-          - name: git.eirini-staging
-        outputs:
-          - name: image_labels
-        run:
-          path: bash
-          args:
-          - -exc
-          - |
-            pushd git.eirini-staging
-            echo "{ \"commit\": \"$(git rev-parse HEAD)\", \"timestamp\": \"$(date +"%s")\" }" > ../image_labels/labels
-            echo "{ \"baseimage\": \"registry.opensuse.org/cloud/platform/stack/rootfs/images/sle15:latest\", \"GIT_SHA\": \"$(git rev-parse HEAD)\" }" > ../image_labels/build_args
-            popd
-    - put: docker-image.downloader-image
-      params:
-        build_args_file: image_labels/build_args
-        build: git.eirini-staging
-        dockerfile: git.eirini-staging/image/downloader/Dockerfile
-        tag_file: semver.downloader-image/version
-        labels_file: image_labels/labels
-        tag_as_latest: true
-    - put: semver.downloader-image
-      params:
-        file: semver.downloader-image/version
-  - name: create-downloader-pr
-    plan:
-    - in_parallel:
-      - get: semver.downloader-image
-        trigger: true
-        passed: [ build-downloader-image ]
-      - get: docker-image.downloader-image
-      - get: git.scf
-        params:
-          submodules: none
-      - get: ci
-    - task: create-scf-pr
-      input_mapping: { semver: semver.downloader-image, docker_image: docker-image.downloader-image }
-      config:
-        platform: linux
-        image_resource:
-          type: registry-image
-          source:
-            repository: splatform/concourse-brats
-        inputs:
-          - name: semver
-          - name: docker_image
-          - name: ci
-          - name: git.scf
-        params:
-          GITHUB_TOKEN: ((github-access-token))
-          GITHUB_PRIVATE_KEY: |
-            {{github-private-key}}
-          GIT_MAIL: {{github-username}}
-          GIT_USER: suse-cf-ci-bot
-          IMAGE_TO_REPLACE: recipe-downloader
-        run:
-          path: ci/tasks/create-pr.sh
-  - name: build-executor-image
+
+{{- range $_, $stagingImage := $stagingImages }}
+  - name: build-{{ $stagingImage }}-image
     plan:
     - in_parallel:
       - get: git.eirini-staging
         trigger: true
       - get: github-release.sle15-release
         trigger: true
-      - get: semver.executor-image
+      - get: semver.{{ $stagingImage }}-image
         params: {bump: minor}
-      - get: git.scf
-        params:
-          submodules: none
-      - get: ci
     - task: get-image-labels-from-git
       config:
         platform: linux
@@ -413,30 +318,30 @@ jobs:
             echo "{ \"commit\": \"$(git rev-parse HEAD)\", \"timestamp\": \"$(date +"%s")\" }" > ../image_labels/labels
             echo "{ \"baseimage\": \"registry.opensuse.org/cloud/platform/stack/rootfs/images/sle15:latest\", \"GIT_SHA\": \"$(git rev-parse HEAD)\" }" > ../image_labels/build_args
             popd
-    - put: docker-image.executor-image
+    - put: docker-image.{{ $stagingImage }}-image
       params:
         build_args_file: image_labels/build_args
         build: git.eirini-staging
-        dockerfile: git.eirini-staging/image/executor/Dockerfile
+        dockerfile: git.eirini-staging/image/{{ $stagingImage }}/Dockerfile
+        tag_file: semver.{{ $stagingImage }}-image/version
         labels_file: image_labels/labels
         tag_as_latest: true
-        tag_file: semver.executor-image/version
-    - put: semver.executor-image
+    - put: semver.{{ $stagingImage }}-image
       params:
-        file: semver.executor-image/version
-  - name: create-executor-pr
+        file: semver.{{ $stagingImage }}-image/version
+  - name: create-{{ $stagingImage }}-pr
     plan:
     - in_parallel:
-      - get: semver.executor-image
+      - get: semver.{{ $stagingImage }}-image
         trigger: true
-        passed: [ build-executor-image ]
-      - get: docker-image.executor-image
+        passed: [ build-{{ $stagingImage }}-image ]
+      - get: docker-image.{{ $stagingImage }}-image
       - get: git.scf
         params:
           submodules: none
       - get: ci
     - task: create-scf-pr
-      input_mapping: { semver: semver.executor-image, docker_image: docker-image.executor-image }
+      input_mapping: { semver: semver.{{ $stagingImage }}-image, docker_image: docker-image.{{ $stagingImage }}-image }
       config:
         platform: linux
         image_resource:
@@ -449,84 +354,12 @@ jobs:
           - name: ci
           - name: git.scf
         params:
-          GITHUB_TOKEN: ((github-access-token))
+          GITHUB_TOKEN: {{ "{{github-access-token}}" }}
           GITHUB_PRIVATE_KEY: |
-            {{github-private-key}}
-          GIT_MAIL: {{github-username}}
+            {{ "{{github-private-key}}" }}
+          GIT_MAIL: {{ "{{github-username}}" }}
           GIT_USER: suse-cf-ci-bot
-          IMAGE_TO_REPLACE: recipe-executor
+          IMAGE_TO_REPLACE: recipe-{{ $stagingImage }}
         run:
           path: ci/tasks/create-pr.sh
-  - name: build-uploader-image
-    plan:
-    - get: git.eirini-staging
-      trigger: true
-    - get: github-release.sle15-release
-      trigger: true
-    - get: semver.uploader-image
-      params: {bump: minor}
-    - task: get-image-labels-from-git
-      config:
-        platform: linux
-        image_resource:
-          type: registry-image
-          source:
-            repository: splatform/bosh-cli
-            tag: ffdc518965675023196dd8cf511e3680484c3ed0
-        inputs:
-          - name: git.eirini-staging
-        outputs:
-          - name: image_labels
-        run:
-          path: bash
-          args:
-          - -exc
-          - |
-            pushd git.eirini-staging
-            echo "{ \"commit\": \"$(git rev-parse HEAD)\", \"timestamp\": \"$(date +"%s")\" }" > ../image_labels/labels
-            echo "{ \"baseimage\": \"registry.opensuse.org/cloud/platform/stack/rootfs/images/sle15:latest\", \"GIT_SHA\": \"$(git rev-parse HEAD)\" }" > ../image_labels/build_args
-            popd
-    - put: docker-image.uploader-image
-      params:
-        build_args_file: image_labels/build_args
-        build: git.eirini-staging
-        dockerfile: git.eirini-staging/image/uploader/Dockerfile
-        labels_file: image_labels/labels
-        tag_file: semver.uploader-image/version
-        tag_as_latest: true
-    - put: semver.uploader-image
-      params:
-        file: semver.uploader-image/version
-  - name: create-uploader-pr
-    plan:
-    - in_parallel:
-      - get: semver.uploader-image
-        trigger: true
-        passed: [ build-uploader-image ]
-      - get: docker-image.uploader-image
-      - get: git.scf
-        params:
-          submodules: none
-      - get: ci
-    - task: create-scf-pr
-      input_mapping: { semver: semver.uploader-image, docker_image: docker-image.uploader-image }
-      config:
-        platform: linux
-        image_resource:
-          type: registry-image
-          source:
-            repository: splatform/concourse-brats
-        inputs:
-          - name: semver
-          - name: docker_image
-          - name: ci
-          - name: git.scf
-        params:
-          GITHUB_TOKEN: ((github-access-token))
-          GITHUB_PRIVATE_KEY: |
-            {{github-private-key}}
-          GIT_MAIL: {{github-username}}
-          GIT_USER: suse-cf-ci-bot
-          IMAGE_TO_REPLACE: recipe-uploader
-        run:
-          path: ci/tasks/create-pr.sh
+{{ end }}
