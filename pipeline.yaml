@@ -32,10 +32,8 @@ resources:
 - name: git.eirini-staging
   type: git
   source:
-    # TODO: Use the upstream repo when this is merged: https://github.com/cloudfoundry-incubator/eirini-staging/pull/5/files
-    uri: git@github.com:jimmykarily/eirini-staging.git
+    uri: git@github.com:cloudfoundry-incubator/eirini-staging.git
     private_key: {{github-private-key}}
-    branch: parameterize_base_image
 - name: docker-image.downloader-image
   type: docker-image
   source:
@@ -212,7 +210,7 @@ jobs:
           type: registry-image
           source:
             repository: splatform/bosh-cli
-            tag: 761288a4a7202607e73bbcb57f6e89d940bf92be
+            tag: ffdc518965675023196dd8cf511e3680484c3ed0
         inputs:
           - name: binaries
           - name: semver.launchers
@@ -260,7 +258,7 @@ jobs:
           type: registry-image
           source:
             repository: splatform/bosh-cli
-            tag: 761288a4a7202607e73bbcb57f6e89d940bf92be
+            tag: ffdc518965675023196dd8cf511e3680484c3ed0
         inputs:
           - name: s3.launcher
           - name: s3.launch
@@ -289,7 +287,7 @@ jobs:
           type: registry-image
           source:
             repository: splatform/bosh-cli
-            tag: 761288a4a7202607e73bbcb57f6e89d940bf92be
+            tag: ffdc518965675023196dd8cf511e3680484c3ed0
         inputs:
           - name: go/src/github.com/cloudfoundry-incubator/eirinifs/image/
           - name: semver.eirinifs-sle15
@@ -323,7 +321,7 @@ jobs:
           type: registry-image
           source:
             repository: splatform/bosh-cli
-            tag: 761288a4a7202607e73bbcb57f6e89d940bf92be
+            tag: ffdc518965675023196dd8cf511e3680484c3ed0
         inputs:
           - name: git.eirini-staging
         outputs:
@@ -335,12 +333,11 @@ jobs:
           - |
             pushd git.eirini-staging
             echo "{ \"commit\": \"$(git rev-parse HEAD)\", \"timestamp\": \"$(date +"%s")\" }" > ../image_labels/labels
+            echo "{ \"baseimage\": \"registry.opensuse.org/cloud/platform/stack/rootfs/images/sle15:latest\", \"GIT_SHA\": \"$(git rev-parse HEAD)\" }" > ../image_labels/build_args
             popd
     - put: docker-image.downloader-image
       params:
-        build_args:
-          # TODO: Should we use the version of the rootfs that's included in the github-release resource above?
-          baseimage: registry.opensuse.org/cloud/platform/stack/rootfs/images/sle15:latest
+        build_args_file: image_labels/build_args
         build: git.eirini-staging
         dockerfile: git.eirini-staging/image/downloader/Dockerfile
         tag_file: semver.downloader-image/version
@@ -402,7 +399,7 @@ jobs:
           type: registry-image
           source:
             repository: splatform/bosh-cli
-            tag: 761288a4a7202607e73bbcb57f6e89d940bf92be
+            tag: ffdc518965675023196dd8cf511e3680484c3ed0
         inputs:
           - name: git.eirini-staging
         outputs:
@@ -414,12 +411,11 @@ jobs:
           - |
             pushd git.eirini-staging
             echo "{ \"commit\": \"$(git rev-parse HEAD)\", \"timestamp\": \"$(date +"%s")\" }" > ../image_labels/labels
+            echo "{ \"baseimage\": \"registry.opensuse.org/cloud/platform/stack/rootfs/images/sle15:latest\", \"GIT_SHA\": \"$(git rev-parse HEAD)\" }" > ../image_labels/build_args
             popd
     - put: docker-image.executor-image
       params:
-        build_args:
-          # TODO: Should we use the version of the rootfs that's included in the github-release resource above?
-          baseimage: registry.opensuse.org/cloud/platform/stack/rootfs/images/sle15:latest
+        build_args_file: image_labels/build_args
         build: git.eirini-staging
         dockerfile: git.eirini-staging/image/executor/Dockerfile
         labels_file: image_labels/labels
@@ -476,7 +472,7 @@ jobs:
           type: registry-image
           source:
             repository: splatform/bosh-cli
-            tag: 761288a4a7202607e73bbcb57f6e89d940bf92be
+            tag: ffdc518965675023196dd8cf511e3680484c3ed0
         inputs:
           - name: git.eirini-staging
         outputs:
@@ -488,12 +484,11 @@ jobs:
           - |
             pushd git.eirini-staging
             echo "{ \"commit\": \"$(git rev-parse HEAD)\", \"timestamp\": \"$(date +"%s")\" }" > ../image_labels/labels
+            echo "{ \"baseimage\": \"registry.opensuse.org/cloud/platform/stack/rootfs/images/sle15:latest\", \"GIT_SHA\": \"$(git rev-parse HEAD)\" }" > ../image_labels/build_args
             popd
     - put: docker-image.uploader-image
       params:
-        build_args:
-          # TODO: Should we use the version of the rootfs that's included in the github-release resource above?
-          baseimage: registry.opensuse.org/cloud/platform/stack/rootfs/images/sle15:latest
+        build_args_file: image_labels/build_args
         build: git.eirini-staging
         dockerfile: git.eirini-staging/image/uploader/Dockerfile
         labels_file: image_labels/labels
