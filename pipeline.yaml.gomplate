@@ -3,17 +3,17 @@
 {{ $otherImages := slice "opi" }}
 
 resources:
-- name: ci
-  type: git
-  source:
-    uri: git@github.com:SUSE/scf-eirini-ci.git
-    private_key: {{ "{{github-private-key}}" }}
-- name: git.scf
-  type: git
-  source:
-    uri: git@github.com:SUSE/scf.git
-    private_key: {{ "{{github-private-key}}" }}
-    branch: develop
+#- name: ci
+#  type: git
+#  source:
+#    uri: git@github.com:SUSE/scf-eirini-ci.git
+#    private_key: {{ "{{github-private-key}}" }}
+#- name: git.scf
+#  type: git
+#  source:
+#    uri: git@github.com:SUSE/scf.git
+#    private_key: {{ "{{github-private-key}}" }}
+#    branch: develop
 - name: git.diego-ssh
   type: git
   source:
@@ -33,6 +33,14 @@ resources:
       - launcher.go
       - go.*
       - launchcmd/*
+
+- name: github-release.eirini-release
+  type: github-release
+  source:
+    owner: cloudfoundry-incubator
+    repository: eirini-release
+    access_token: {{ "{{github-access-token}}" }}
+
 - name: git.eirini-staging
   type: git
   source:
@@ -47,6 +55,28 @@ resources:
     username: ((docker-public-staging-username))
     password: ((docker-public-staging-password))
 {{ end }}
+
+#{{- range $_, $image := $otherImages }}
+#- name: docker-image.{{ $image }}-image
+#  type: docker-image
+#  source:
+#    repository: ((docker-public-staging-registry))/((docker-public-staging-org))/{{ $image }}
+#    username: ((docker-public-staging-username))
+#    password: ((docker-public-staging-password))
+#{{ end }}
+
+- name: docker-image.obs-sle15
+  type: docker-image
+  source:
+    repository: registry.opensuse.org/cloud/platform/stack/rootfs/images/sle15
+
+#- name: git.eirini
+#  type: git
+#  source:
+#    # TODO: replace with upstream when this is merged: https://github.com/cloudfoundry-incubator/eirini/pull/91/files
+#    uri: git@github.com:jimmykarily/eirini.git
+#    private_key: {{ "{{github-private-key}}" }}
+#    branch: parameterize_base_images
 
 - name: s3.sshd
   type: s3
@@ -81,19 +111,6 @@ resources:
     access_key_id: ((aws-capbot-access-key))
     secret_access_key: ((aws-capbot-secret-key))
 
-{{- range $_, $stagingImage := $stagingImages }}
-- name: semver.{{ $stagingImage }}-image
-  type: semver
-  source:
-    driver: s3
-    initial_version: 0.3.0
-    bucket: suse-eirini-bits
-    key: version-eirini-{{ $stagingImage }}-image
-    access_key_id: ((aws-capbot-access-key))
-    secret_access_key: ((aws-capbot-secret-key))
-    region_name: eu-central-1
-{{ end }}
-
 - name: semver.eirinifs-sle15
   type: semver
   source:
@@ -121,12 +138,13 @@ resources:
     access_key_id: ((aws-capbot-access-key))
     secret_access_key: ((aws-capbot-secret-key))
     region_name: eu-central-1
-- name: github-release.sle15-release
-  type: github-release
-  source:
-    owner: SUSE
-    repository: cf-sle15-release
-    access_token: {{ "{{github-access-token}}" }}
+
+#- name: github-release.sle15-release
+#  type: github-release
+#  source:
+#    owner: SUSE
+#    repository: cf-sle15-release
+#    access_token: {{ "{{github-access-token}}" }}
 jobs:
   - name: build-sshd
     plan:
@@ -227,7 +245,7 @@ jobs:
         trigger: true
         passed: [ build-sshd ]
       - get: git.eirinifs
-      - get: github-release.sle15-release
+      - get: docker-image.obs-sle15
         trigger: true
       - get: semver.eirinifs-sle15
         params: {bump: minor}
@@ -259,6 +277,9 @@ jobs:
       input_mapping:
         eirinifs: git.eirinifs
         sle15-release: github-release.sle15-release
+      # Upstream eirinifs repo is using a multistage Dockerfile nowadays:
+      # https://github.com/cloudfoundry-incubator/eirinifs/blob/master/image/Dockerfile
+      # TODO: Use that instead of the custom solution we built.
       file: git.eirinifs/ci/build-sle15/task.yml
     - task: copy-eirinifs-sle15-file
       config:
@@ -291,21 +312,21 @@ jobs:
   - name: build-{{ $stagingImage }}-image
     plan:
     - in_parallel:
+      - get: github-release.eirini-release
+        trigger: true
+      - get: docker-image.obs-sle15
+        trigger: true
       - get: git.eirini-staging
-        trigger: true
-      - get: github-release.sle15-release
-        trigger: true
-      - get: semver.{{ $stagingImage }}-image
-        params: {bump: minor}
-    - task: get-image-labels-from-git
+    - task: prepare_image_build_files
       config:
         platform: linux
         image_resource:
           type: registry-image
           source:
-            repository: splatform/bosh-cli
-            tag: ffdc518965675023196dd8cf511e3680484c3ed0
+            repository: splatform/bosh-cli_stemcell_pusher
         inputs:
+          - name: github-release.eirini-release
+          - name: docker-image.obs-sle15
           - name: git.eirini-staging
         outputs:
           - name: image_labels
@@ -314,52 +335,142 @@ jobs:
           args:
           - -exc
           - |
-            pushd git.eirini-staging
+            # TODO: 
+            # - Find the eirini-release version from the github-release input
+            # - Find the stack version from the sle15-release input 
+            # - Construct version of the staging images by combining the 2 above.
+            # - The registry.suse.com/cap-staging/sle15-rootfs image should have a tag that matches the bosh release version.
+            #   Right now it has a checksum suffix. If we use the lftp resource to import what OBS is building, we should
+            #   just skip pushing to the staging registry when the image is already there (already doing it in the stemcell publishing pipeline).
+            #   Then there is no reason to put a checksum to the image tag. There is only going to be one image for every OBS build (no way to produce a
+            #   new image by retriggering the publishing pipeline)
+
+            eirini_release_version=$(cat github-release.eirini-release/version)
+            rootfs_version=$(cat docker-image.obs-sle15/docker_inspect.json | jq -r '.[0].Config.Labels["org.opencontainers.image.version"]')
+            image_tag="${eirini_release_version}-${rootfs_version}"
+            
+            pushd  git.eirini-staging
+            git checkout  $(cat ../github-release/eirini-release/version)
             echo "{ \"commit\": \"$(git rev-parse HEAD)\", \"timestamp\": \"$(date +"%s")\" }" > ../image_labels/labels
-            echo "{ \"baseimage\": \"registry.opensuse.org/cloud/platform/stack/rootfs/images/sle15:latest\", \"GIT_SHA\": \"$(git rev-parse HEAD)\" }" > ../image_labels/build_args
+            echo "{ \"baseimage\": \"registry.opensuse.org/cloud/platform/stack/rootfs/images/sle15:${rootfs_version}\", \"GIT_SHA\": \"$(git rev-parse HEAD)\" }" > ../image_labels/build_args
+            echo ${image_tag} > ../image_labels/tag
             popd
     - put: docker-image.{{ $stagingImage }}-image
       params:
         build_args_file: image_labels/build_args
         build: git.eirini-staging
         dockerfile: git.eirini-staging/image/{{ $stagingImage }}/Dockerfile
-        tag_file: semver.{{ $stagingImage }}-image/version
+        tag_file: image_labels/tag
         labels_file: image_labels/labels
         tag_as_latest: true
-    - put: semver.{{ $stagingImage }}-image
-      params:
-        file: semver.{{ $stagingImage }}-image/version
-  - name: create-{{ $stagingImage }}-pr
-    plan:
-    - in_parallel:
-      - get: semver.{{ $stagingImage }}-image
-        trigger: true
-        passed: [ build-{{ $stagingImage }}-image ]
-      - get: docker-image.{{ $stagingImage }}-image
-      - get: git.scf
-        params:
-          submodules: none
-      - get: ci
-    - task: create-scf-pr
-      input_mapping: { semver: semver.{{ $stagingImage }}-image, docker_image: docker-image.{{ $stagingImage }}-image }
-      config:
-        platform: linux
-        image_resource:
-          type: registry-image
-          source:
-            repository: splatform/concourse-brats
-        inputs:
-          - name: semver
-          - name: docker_image
-          - name: ci
-          - name: git.scf
-        params:
-          GITHUB_TOKEN: {{ "{{github-access-token}}" }}
-          GITHUB_PRIVATE_KEY: |
-            {{ "{{github-private-key}}" }}
-          GIT_MAIL: {{ "{{github-username}}" }}
-          GIT_USER: suse-cf-ci-bot
-          IMAGE_TO_REPLACE: recipe-{{ $stagingImage }}
-        run:
-          path: ci/tasks/create-pr.sh
+
+#   - name: create-{{ $stagingImage }}-pr
+#     plan:
+#     - in_parallel:
+#       - get: docker-image.{{ $stagingImage }}-image
+#         trigger: true
+#         passed: [ build-{{ $stagingImage }}-image ]
+#       - get: git.scf
+#         params:
+#           submodules: none
+#       - get: ci
+#     - task: create-scf-pr
+#       input_mapping: { semver: semver.{{ $stagingImage }}-image, docker_image: docker-image.{{ $stagingImage }}-image }
+#       config:
+#         platform: linux
+#         image_resource:
+#           type: registry-image
+#           source:
+#             repository: splatform/concourse-brats
+#         inputs:
+#           - name: semver
+#           - name: docker_image
+#           - name: ci
+#           - name: git.scf
+#         params:
+#           GITHUB_TOKEN: {{ "{{github-access-token}}" }}
+#           GITHUB_PRIVATE_KEY: |
+#             {{ "{{github-private-key}}" }}
+#           GIT_MAIL: {{ "{{github-username}}" }}
+#           GIT_USER: suse-cf-ci-bot
+#           IMAGE_TO_REPLACE: recipe-{{ $stagingImage }}
+#         run:
+#           path: ci/tasks/create-pr.sh
 {{ end }}
+
+# {{- range $_, $image := $otherImages }}
+#   - name: build-{{ $image }}-image
+#     plan:
+#     - in_parallel:
+#       - get: git.eirini
+#         trigger: true
+#       - get: docker-image.obs-sle15
+#         trigger: true
+#       - get: semver.{{ $image }}-image
+#         params: {bump: minor}
+#     - task: get-image-labels-from-git
+#       config:
+#         platform: linux
+#         image_resource:
+#           type: registry-image
+#           source:
+#             repository: splatform/bosh-cli
+#             tag: ffdc518965675023196dd8cf511e3680484c3ed0
+#         inputs:
+#           - name: git.eirini
+#         outputs:
+#           - name: image_labels
+#         run:
+#           path: bash
+#           args:
+#           - -exc
+#           - |
+#             pushd git.eirini
+#             echo "{ \"commit\": \"$(git rev-parse HEAD)\", \"timestamp\": \"$(date +"%s")\" }" > ../image_labels/labels
+#             echo "{ \"baseimage\": \"registry.opensuse.org/cloud/platform/stack/rootfs/images/sle15:latest\", \"GIT_SHA\": \"$(git rev-parse HEAD)\" }" > ../image_labels/build_args
+#             popd
+#     - put: docker-image.{{ $image }}-image
+#       params:
+#         build_args_file: image_labels/build_args
+#         build: git.eirini
+#         dockerfile: git.eirini/docker/{{ $image }}/Dockerfile
+#         tag_file: semver.{{ $image }}-image/version
+#         labels_file: image_labels/labels
+#         tag_as_latest: true
+#     - put: semver.{{ $image }}-image
+#       params:
+#         file: semver.{{ $image }}-image/version
+#   - name: create-{{ $image }}-pr
+#     plan:
+#     - in_parallel:
+#       - get: semver.{{ $image }}-image
+#         trigger: true
+#         passed: [ build-{{ $image }}-image ]
+#       - get: docker-image.{{ $image }}-image
+#       - get: git.scf
+#         params:
+#           submodules: none
+#       - get: ci
+#     - task: create-scf-pr
+#       input_mapping: { semver: semver.{{ $image }}-image, docker_image: docker-image.{{ $image }}-image }
+#       config:
+#         platform: linux
+#         image_resource:
+#           type: registry-image
+#           source:
+#             repository: splatform/concourse-brats
+#         inputs:
+#           - name: semver
+#           - name: docker_image
+#           - name: ci
+#           - name: git.scf
+#         params:
+#           GITHUB_TOKEN: {{ "{{github-access-token}}" }}
+#           GITHUB_PRIVATE_KEY: |
+#             {{ "{{github-private-key}}" }}
+#           GIT_MAIL: {{ "{{github-username}}" }}
+#           GIT_USER: suse-cf-ci-bot
+#           IMAGE_TO_REPLACE: recipe-{{ $image }}
+#         run:
+#           path: ci/tasks/create-pr.sh
+# {{ end }}
