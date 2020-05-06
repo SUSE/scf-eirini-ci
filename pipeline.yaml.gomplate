@@ -20,6 +20,13 @@ resources:
     uri: git@github.com:cloudfoundry/diego-ssh.git
     private_key: {{ "{{github-private-key}}" }}
 
+- name: git.bits-service-release
+  type: git
+  source:
+    uri: git@github.com:SUSE/bits-service-release.git
+    private_key: {{ "{{github-private-key}}" }}
+    tag_filter: "*"
+
 - name: git.eirinifs
   type: git
   source:
@@ -66,6 +73,21 @@ resources:
     username: ((docker-public-staging-username))
     password: ((docker-public-staging-password))
 
+# A base SLE15 image
+- name: docker-image.sle15-sp1
+  type: docker-image
+  source:
+    repository: registry.suse.com/suse/sle15
+    tag: 15.1
+
+- name: docker-image.bits-image
+  type: docker-image
+  source:
+    repository: ((docker-public-staging-registry))/((docker-public-staging-org))/bits-service
+    username: ((docker-public-staging-username))
+    password: ((docker-public-staging-password))
+
+# The SLE15 rootfs built in OBS
 - name: docker-image.obs-sle15
   type: docker-image
   source:
@@ -345,3 +367,80 @@ jobs:
         labels_file: docker_meta/labels
         tag_as_latest: true
 {{ end }}
+
+  - name: build-bits-image
+    plan:
+    - in_parallel:
+      - get: git.bits-service-release
+        trigger: true
+      - get: docker-image.sle15-sp1
+        trigger: true
+      - get: docker-image.eirinifs-sle15
+        trigger: true
+        passed: [ build-eirinifs-sle15 ]
+        params:
+          rootfs: true
+    - task: prepare_docker_meta
+      config:
+        platform: linux
+        image_resource:
+          type: registry-image
+          source:
+            repository: splatform/bosh-cli_stemcell_pusher
+        inputs:
+          - name: git.bits-service-release
+          - name: docker-image.sle15-sp1
+          - name: docker-image.eirinifs-sle15
+        outputs:
+          - name: docker_meta
+        run:
+          path: bash
+          args:
+          - -exc
+          - |
+            cat <<'EOF' > docker_meta/Dockerfile
+            ARG baseimage=registry.opensuse.org/suse/templates/images/sle-15-sp1/images/my-container:latest
+
+            FROM golang:1.13 as builder
+            WORKDIR /bits-service-release/
+            COPY . .
+
+            ENV GOPATH=/bits-service-release
+            RUN wget https://github.com/Masterminds/glide/releases/download/v0.13.3/glide-v0.13.3-linux-amd64.tar.gz
+            RUN tar --strip 1 -C /usr/bin -xf glide-v0.13.3-linux-amd64.tar.gz  linux-amd64/glide
+
+            RUN cd /bits-service-release/src/github.com/cloudfoundry-incubator/bits-service && glide install
+            RUN GOOS=linux GOARCH=amd64 go build -o bitsgo github.com/cloudfoundry-incubator/bits-service/cmd/bitsgo
+
+            FROM ${baseimage}
+            COPY --from=builder /bits-service-release/bitsgo /workspace/jobs/bits-service/bin/
+            COPY --from=builder /bits-service-release/eirinifs.tar /assets/eirinifs.tar
+
+            USER 1001
+
+            ENTRYPOINT [ "/workspace/jobs/bits-service/bin/bitsgo", "--config", "/workspace/jobs/bits-service/config/bits-service.yml" ]
+            ARG GIT_SHA
+            LABEL org.opencontainers.image.revision=$GIT_SHA \
+                  org.opencontainers.image.source=https://code.cloudfoundry.org/bits-service
+            EOF
+
+            cp docker-image.eirinifs-sle15/rootfs.tar docker_meta/eirinifs.tar
+            cp -r git.bits-service-release/* docker_meta/
+
+            sle_version=$(cat docker-image.sle15-sp1/docker_inspect.json | jq -r '.[0].Config.Labels["org.opencontainers.image.version"]')
+            eirinifs_version=$(cat docker-image.eirinifs-sle15/docker_inspect.json | jq -r '.[0].Config.Labels["org.opencontainers.image.version"]')
+            pushd git.bits-service-release
+            bits_tag=$(cat .git/ref)
+            echo "{ \"bits_service_release_version\": \"${bits_tag}\", \"timestamp\": \"$(date +"%s")\" }" > ../docker_meta/labels
+            echo "{ \"GIT_SHA\": \"$(git rev-parse HEAD)\" }" > ../docker_meta/build_args
+            echo "${bits_tag}-${sle_version}-${eirinifs_version}" > ../docker_meta/tag
+            popd
+
+    - put: docker-image.bits-image
+      params:
+        build: docker_meta
+        dockerfile: docker_meta/Dockerfile
+        tag_file: docker_meta/tag
+        build_args_file: docker_meta/build_args
+        labels_file: docker_meta/labels
+        tag_as_latest: true
