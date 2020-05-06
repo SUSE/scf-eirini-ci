@@ -27,18 +27,19 @@ resources:
     private_key: {{ "{{github-private-key}}" }}
     tag_filter: v*
 
-- name: github-release.eirini-release
-  type: github-release
-  source:
-    owner: cloudfoundry-incubator
-    repository: eirini-release
-    access_token: {{ "{{github-access-token}}" }}
+#- name: github-release.eirini-release
+#  type: github-release
+#  source:
+#    owner: cloudfoundry-incubator
+#    repository: eirini-release
+#    access_token: {{ "{{github-access-token}}" }}
 
 - name: git.eirini-staging
   type: git
   source:
     uri: git@github.com:cloudfoundry-incubator/eirini-staging.git
     private_key: {{ "{{github-private-key}}" }}
+    tag_filter: '[[:digit:]]*[.][[:digit:]]*[.][[:digit:]]*'
 
 {{- range $_, $stagingImage := $stagingImages }}
 - name: docker-image.{{ $stagingImage }}-image
@@ -225,11 +226,10 @@ jobs:
   - name: build-{{ $stagingImage }}-image
     plan:
     - in_parallel:
-      - get: github-release.eirini-release
-        trigger: true
       - get: docker-image.obs-sle15
         trigger: true
       - get: git.eirini-staging
+        trigger: true
     - task: prepare_image_build_files
       config:
         platform: linux
@@ -238,7 +238,6 @@ jobs:
           source:
             repository: splatform/bosh-cli_stemcell_pusher
         inputs:
-          - name: github-release.eirini-release
           - name: docker-image.obs-sle15
           - name: git.eirini-staging
         outputs:
@@ -248,12 +247,11 @@ jobs:
           args:
           - -exc
           - |
-            eirini_release_version=$(cat github-release.eirini-release/version)
+            eirini_staging_version=$(cat git.eirini-staging/.git/ref)
             rootfs_version=$(cat docker-image.obs-sle15/docker_inspect.json | jq -r '.[0].Config.Labels["org.opencontainers.image.version"]')
-            image_tag="${eirini_release_version}-${rootfs_version}"
+            image_tag="${eirini_staging_version}-${rootfs_version}"
             
             pushd  git.eirini-staging
-            git checkout  $(cat ../github-release/eirini-release/version)
             echo "{ \"commit\": \"$(git rev-parse HEAD)\", \"timestamp\": \"$(date +"%s")\" }" > ../image_labels/labels
             echo "{ \"baseimage\": \"registry.opensuse.org/cloud/platform/stack/rootfs/images/sle15:${rootfs_version}\", \"GIT_SHA\": \"$(git rev-parse HEAD)\" }" > ../image_labels/build_args
             echo ${image_tag} > ../image_labels/tag
