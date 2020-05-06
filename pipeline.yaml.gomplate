@@ -329,10 +329,17 @@ jobs:
             echo "${eirini_tag}" > ../docker_meta/tag
             popd
 
+            # Build opi image from scratch. Upstream switched to Ubuntu, not sure why:
+            # https://github.com/cloudfoundry-incubator/eirini/commit/d0587acbc1523247051f35a4099016942410a12
+            cp git.eirini/docker/{{ $image }}/Dockerfile docker_meta/Dockerfile
+            {{ if eq $image "opi" }}
+            sed -i 's/cloudfoundry\/run:tiny/scratch/' docker_meta/Dockerfile
+            {{ end }}
+
     - put: docker-image.{{ $image }}-image
       params:
         build: git.eirini
-        dockerfile: git.eirini/docker/{{ $image }}/Dockerfile
+        dockerfile: docker_meta/Dockerfile
         tag_file: docker_meta/tag
         build_args_file: docker_meta/build_args
         labels_file: docker_meta/labels
