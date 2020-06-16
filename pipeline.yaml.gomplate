@@ -224,7 +224,7 @@ jobs:
             echo ${rootfs_version} > source_dir/image_tag
 
             # Change the Dockerfile in order to start sshd inside the eirinifs image
-            cat << EOF >> source_dir/new-launch
+            cat << EOF >> source_dir/image/Dockerfile
             RUN mv /lifecycle/launch /lifecycle/original-launch
             COPY ./new-launch /lifecycle/launch
             COPY ./sshd /lifecycle/sshd
