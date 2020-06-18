@@ -209,7 +209,7 @@ jobs:
             cp s3.sshd/sshd-* source_dir/sshd
             chmod +x source_dir/sshd
 
-            cat << EOF > source_dir/new-launch
+            cat << 'EOF' > source_dir/new-launch
             #!/bin/bash
             # Consume the EIRINI SSH fingerprint so that the sshd daemon advertize it
             /lifecycle/sshd -inheritDaemonEnv --hostKey "${EIRINI_HOST_KEY}" --authorizedKey "${EIRINI_SSH_KEY}" --address 0.0.0.0:2222 2>&1 > /tmp/sshd.log &
@@ -224,10 +224,11 @@ jobs:
             echo ${rootfs_version} > source_dir/image_tag
 
             # Change the Dockerfile in order to start sshd inside the eirinifs image
-            cat << EOF >> source_dir/image/Dockerfile
+            cat << 'EOF' >> source_dir/image/Dockerfile
             RUN mv /lifecycle/launch /lifecycle/original-launch
             COPY ./new-launch /lifecycle/launch
             COPY ./sshd /lifecycle/sshd
+            RUN chmod +x /lifecycle/*
             EOF
 
     - put: docker-image.eirinifs-sle15
