@@ -219,7 +219,7 @@ jobs:
             rootfs_version=$(cat docker-image.obs-sle15/docker_inspect.json | jq -r '.[0].Config.Labels["org.opencontainers.image.version"]')
             eirinifs_version=$(cat git.eirinifs/.git/ref)
 
-            echo "{ \"eirinifs-version\": \"${eirinfs_version}\", \"timestamp\": \"$(date +"%s")\" }" > source_dir/labels
+            echo "{ \"eirinifs-version\": \"${eirinifs_version}\", \"timestamp\": \"$(date +"%s")\" }" > source_dir/labels
             echo "{ \"baseimage\": \"registry.opensuse.org/cloud/platform/stack/rootfs/images/sle15:${rootfs_version}\" }" > source_dir/build_args
             echo ${rootfs_version} > source_dir/image_tag
 
