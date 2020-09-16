@@ -273,7 +273,7 @@ jobs:
             eirini_staging_version=$(cat git.eirini-staging/.git/ref)
             rootfs_version=$(cat docker-image.obs-sle15/docker_inspect.json | jq -r '.[0].Config.Labels["org.opencontainers.image.version"]')
             image_tag="${eirini_staging_version}-${rootfs_version}"
-            
+
             pushd  git.eirini-staging
             echo "{ \"commit\": \"$(git rev-parse HEAD)\", \"timestamp\": \"$(date +"%s")\" }" > ../image_labels/labels
             echo "{ \"baseimage\": \"registry.opensuse.org/cloud/platform/stack/rootfs/images/sle15:${rootfs_version}\", \"GIT_SHA\": \"$(git rev-parse HEAD)\" }" > ../image_labels/build_args
@@ -328,16 +328,22 @@ jobs:
     - in_parallel:
       - get: git.eirini
         trigger: true
+      {{ if eq $image "opi" }}
+      - get: docker-image.obs-sle15
+        trigger: true
+      {{ end }}
     - task: prepare_docker_meta
       config:
         platform: linux
         image_resource:
           type: registry-image
           source:
-            repository: splatform/bosh-cli
-            tag: ffdc518965675023196dd8cf511e3680484c3ed0
+            repository: splatform/bosh-cli_stemcell_pusher
         inputs:
           - name: git.eirini
+          {{ if eq $image "opi" }}
+          - name: docker-image.obs-sle15
+          {{ end }}
         outputs:
           - name: docker_meta
         run:
@@ -348,16 +354,16 @@ jobs:
             pushd git.eirini
             eirini_tag=$(cat .git/ref)
             echo "{ \"eirini_version\": \"${eirini_tag}\", \"timestamp\": \"$(date +"%s")\" }" > ../docker_meta/labels
+            {{ if eq $image "opi" }}
+            rootfs_version=$(cat ../docker-image.obs-sle15/docker_inspect.json | jq -r '.[0].Config.Labels["org.opencontainers.image.version"]')
+            echo "{ \"baseimage\": \"registry.opensuse.org/cloud/platform/stack/rootfs/images/sle15:${rootfs_version}\", \"GIT_SHA\": \"$(git rev-parse HEAD)\" }" > ../docker_meta/build_args
+            {{ else }}
             echo "{ \"GIT_SHA\": \"$(git rev-parse HEAD)\" }" > ../docker_meta/build_args
+            {{ end }}
             echo "${eirini_tag}" > ../docker_meta/tag
             popd
 
-            # Build opi image from scratch. Upstream switched to Ubuntu, not sure why:
-            # https://github.com/cloudfoundry-incubator/eirini/commit/d0587acbc1523247051f35a4099016942410a12
             cp git.eirini/docker/{{ $image }}/Dockerfile docker_meta/Dockerfile
-            {{ if eq $image "opi" }}
-            sed -i 's/cloudfoundry\/run:tiny/scratch/' docker_meta/Dockerfile
-            {{ end }}
 
     - put: docker-image.{{ $image }}-image
       params:
