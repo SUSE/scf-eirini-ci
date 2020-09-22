@@ -1,6 +1,6 @@
 # Variables
 {{ $stagingImages := slice "downloader" "executor" "uploader" }}
-{{ $otherImages := slice "bits-waiter" "event-reporter" "metrics-collector" "opi" "rootfs-patcher" "route-collector" "route-pod-informer" "route-statefulset-informer" "staging-reporter" }}
+{{ $otherImages := slice "bits-waiter" "event-reporter" "metrics-collector" "opi" "rootfs-patcher" "route-collector" "route-pod-informer" "route-statefulset-informer" "staging-reporter" "instance-index-env-injector" }}
 
 resources:
 #- name: ci
@@ -99,6 +99,13 @@ resources:
     uri: git@github.com:cloudfoundry-incubator/eirini.git
     private_key: {{ "{{github-private-key}}" }}
     tag_filter: '[[:digit:]]*[.][[:digit:]]*[.][[:digit:]]*'
+
+- name: git.eirini-master
+  type: git
+  source:
+    uri: git@github.com:cloudfoundry-incubator/eirini.git
+    branch: master
+    private_key: {{ "{{github-private-key}}" }}
 
 - name: s3.sshd
   type: s3
@@ -326,13 +333,23 @@ jobs:
   - name: build-{{ $image }}-image
     plan:
     - in_parallel:
+      {{ if eq $image "instance-index-env-injector" }}
+      - get: git.eirini-master
+        trigger: true
+      {{ else }}
       - get: git.eirini
         trigger: true
-      {{ if eq $image "opi" }}
+      {{ end }}
+      {{ if or (eq $image "opi") (eq $image "instance-index-env-injector") }}
       - get: docker-image.obs-sle15
         trigger: true
       {{ end }}
     - task: prepare_docker_meta
+      {{ if eq $image "instance-index-env-injector" }}
+      input_mapping: { eirini: git.eirini-master }
+      {{ else }}
+      input_mapping: { eirini: git.eirini }
+      {{ end }}
       config:
         platform: linux
         image_resource:
@@ -340,8 +357,8 @@ jobs:
           source:
             repository: splatform/bosh-cli_stemcell_pusher
         inputs:
-          - name: git.eirini
-          {{ if eq $image "opi" }}
+          - name: eirini
+          {{ if or (eq $image "opi") (eq $image "instance-index-env-injector") }}
           - name: docker-image.obs-sle15
           {{ end }}
         outputs:
@@ -351,10 +368,10 @@ jobs:
           args:
           - -exc
           - |
-            pushd git.eirini
+            pushd eirini
             eirini_tag=$(cat .git/ref)
             echo "{ \"eirini_version\": \"${eirini_tag}\", \"timestamp\": \"$(date +"%s")\" }" > ../docker_meta/labels
-            {{ if eq $image "opi" }}
+            {{ if or (eq $image "opi") (eq $image "instance-index-env-injector") }}
             rootfs_version=$(cat ../docker-image.obs-sle15/docker_inspect.json | jq -r '.[0].Config.Labels["org.opencontainers.image.version"]')
             echo "{ \"baseimage\": \"registry.opensuse.org/cloud/platform/stack/rootfs/images/sle15:${rootfs_version}\", \"GIT_SHA\": \"$(git rev-parse HEAD)\" }" > ../docker_meta/build_args
             {{ else }}
@@ -363,11 +380,15 @@ jobs:
             echo "${eirini_tag}" > ../docker_meta/tag
             popd
 
-            cp git.eirini/docker/{{ $image }}/Dockerfile docker_meta/Dockerfile
+            cp eirini/docker/{{ $image }}/Dockerfile docker_meta/Dockerfile
 
     - put: docker-image.{{ $image }}-image
       params:
+        {{ if eq $image "instance-index-env-injector" }}
+        build: git.eirini-master
+        {{ else }}
         build: git.eirini
+        {{ end }}
         dockerfile: docker_meta/Dockerfile
         tag_file: docker_meta/tag
         build_args_file: docker_meta/build_args
