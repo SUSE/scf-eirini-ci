@@ -1,6 +1,6 @@
 # Variables
 {{ $stagingImages := slice "downloader" "executor" "uploader" }}
-{{ $otherImages := slice "bits-waiter" "event-reporter" "metrics-collector" "opi" "rootfs-patcher" "route-collector" "route-pod-informer" "route-statefulset-informer" "staging-reporter" }}
+{{ $otherImages := slice "bits-waiter" "event-reporter" "metrics-collector" "opi" "rootfs-patcher" "route-collector" "route-pod-informer" "route-statefulset-informer" "staging-reporter" "instance-index-env-injector" }}
 
 resources:
 #- name: ci
